@@ -85,7 +85,6 @@ jobs:
   publish-aur:
     name: Publish to AUR
     needs: release
-    if: ${{ hashFiles('PKGBUILD') != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -96,6 +95,10 @@ jobs:
 
       - name: Update PKGBUILD
         run: |
+          if [ ! -f PKGBUILD ]; then
+            echo "PKGBUILD not found; skipping AUR publish."
+            exit 0
+          fi
           sed -i "s/pkgver=.*/pkgver=${{ steps.version.outputs.VERSION }}/" PKGBUILD
           git add PKGBUILD
           git config user.name "CI Bot"
