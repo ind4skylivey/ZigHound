@@ -1,0 +1,17 @@
+.{
+    .name = .zighound,
+    .version = "0.1.0",
+    .fingerprint = 0x7af1f6efaa623bf6,
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "README.md",
+        "QUICKSTART.md",
+        "LICENSE",
+        "docs",
+        "assets",
+    },
+}

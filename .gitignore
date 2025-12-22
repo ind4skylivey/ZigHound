@@ -1,0 +1,227 @@
+################################
+# Production-Grade .gitignore
+# Policy: Based on gitignore_security_guide.md
+# Default-deny, version only reproducible content
+################################
+
+############################
+# SECRETS & SENSITIVE DATA
+############################
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+*.pfx
+*.kdbx
+*.gpg
+*.asc
+secrets/
+loot/
+*.secret
+*.token
+auth.json
+**/credentials*
+.ssh/config
+.aws/
+.azure/
+.gcp/
+
+############################
+# RUNTIME & GENERATED OUTPUT
+############################
+out/
+out_*/
+out-run*/
+out_verify*/
+reports/
+artifacts/
+tmp/
+.cache/
+**/cache/
+build/
+dist/
+/target/
+zig-cache/
+zig-out/
+.zig-cache/
+.zighound_c2_sim*.txt
+results.json
+docs/
+
+############################
+# DATA STORES & EVIDENCE
+############################
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.jsonl
+*.log
+evidence/
+manifests/
+runs/
+telemetry/
+captures/
+pcaps/
+screenshots/
+
+############################
+# CLIENT SCOPES
+############################
+clients/*.toml
+clients/*.yaml
+clients/*.json
+clients/*.config
+!clients/example.toml
+!clients/example.yaml
+!clients/example.json
+!clients/example.config
+
+############################
+# BUILD & DEPENDENCY ARTIFACTS
+############################
+node_modules/
+**/node_modules/
+vendor/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.o
+*.out
+*.a
+*.lib
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+.venv/
+venv/
+env/
+
+############################
+# EDITOR & IDE
+############################
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.bak
+*.backup
+.viminfo
+.netrwhist
+.vim/
+*.sublime-workspace
+.eclipsefdn
+.project
+.pydevproject
+
+############################
+# SHELL & TERMINAL CONFIG
+############################
+**/.zcompdump*
+**/.zsh_history
+**/.histfile
+**/.bash_history
+**/.config/fish/fish_variables
+**/.config/fish/fishd.*
+**/session/
+**/sessions/
+**/history/
+
+############################
+# PLUGIN MANAGERS & CACHE
+############################
+**/zsh/plugins/
+**/.config/zsh/plugins/
+**/.config/tmux/plugins/
+**/tmux/plugins/
+**/zellij/plugins/*.wasm
+**/.config/zellij/plugins/*.wasm
+
+############################
+# EDITOR CACHE & METADATA
+############################
+**/.config/nvim/plugin/
+**/.config/nvim/.netrwhist
+**/.config/nvim/undodir/
+**/.config/nvim/swap/
+
+############################
+# LARGE APPLICATION DATA
+############################
+**/.config/obsidian/
+**/.lmstudio/
+**/.ollama/
+
+############################
+# DEVELOPMENT TOOLS
+############################
+.devdb/
+.gradle/
+Podfile.lock
+
+############################
+# OS & SYSTEM FILES
+############################
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+desktop.ini
+
+############################
+# TEMPORARY & LOCK FILES
+############################
+*.lock
+Gemfile.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.fleet/
+.vscode-test/
+
+############################
+# TEST COVERAGE & REPORTS
+############################
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.tox/
+coverage.xml
+*.cover
+
+############################
+# SECURITY-SPECIFIC OUTPUTS
+############################
+wordlists/
+scan-results/
+recon-data/
+
+############################
+# EXCEPTIONS: Include Fixtures & Examples
+############################
+!fixtures/**/*.jsonl
+!fixtures/**/*.json
+!fixtures/**/*.sql
+!samples/**/*.json
+!examples/**/*.toml
+!examples/**/*.yaml
+!examples/**/*.config
+!.gitkeep
+
+############################
+# LOCAL-ONLY PROJECT FILES
+############################
+PROJECT_COMPLETE.md
+SETUP.md
+START.sh
+ZigHound\ Project\ Generator.html

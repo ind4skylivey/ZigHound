@@ -1,0 +1,128 @@
+name: Release ZigHound
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  release:
+    name: Release ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-linux
+            name: zighound-linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-linux
+            name: zighound-linux-aarch64
+          - os: windows-latest
+            target: x86_64-windows
+            name: zighound-windows-x86_64.exe
+          - os: macos-latest
+            target: x86_64-macos
+            name: zighound-macos-x86_64
+          - os: macos-latest
+            target: aarch64-macos
+            name: zighound-macos-aarch64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+          cache: false
+
+      - name: Build ZigHound (${{ matrix.target }})
+        run: zig build -Dtarget=${{ matrix.target }} -Doptimize=ReleaseSmall
+
+      - name: Create Release Artifact (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p release
+          cp zig-out/bin/zighound release/${{ matrix.name }}
+          chmod +x release/${{ matrix.name }}
+          cd release && sha256sum ${{ matrix.name }} > ${{ matrix.name }}.sha256 && cd ..
+
+      - name: Create Release Artifact (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir release
+          copy zig-out\bin\zighound.exe release\${{ matrix.name }}
+          cd release && certutil -hashfile ${{ matrix.name }} SHA256 > ${{ matrix.name }}.sha256 && cd ..
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List Artifacts (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd release
+          ls -la
+          cd ..
+
+      - name: List Artifacts (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd release
+          Get-ChildItem
+          cd ..
+
+  publish-aur:
+    name: Publish to AUR
+    needs: release
+    if: ${{ hashFiles('PKGBUILD') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract Version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Update PKGBUILD
+        run: |
+          sed -i "s/pkgver=.*/pkgver=${{ steps.version.outputs.VERSION }}/" PKGBUILD
+          git add PKGBUILD
+          git config user.name "CI Bot"
+          git config user.email "ci@zighound.dev"
+          git commit -m "Release: v${{ steps.version.outputs.VERSION }}"
+          git push
+
+  github-pages:
+    name: Update GitHub Pages
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Generate Documentation
+        run: |
+          mkdir -p _site
+          cp README.md _site/index.md
+          echo "# ZigHound Documentation" > _site/docs.md
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '_site'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
