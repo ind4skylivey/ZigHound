@@ -5,6 +5,12 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      publish_pages:
+        description: "Publish GitHub Pages"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -109,6 +115,7 @@ jobs:
   github-pages:
     name: Update GitHub Pages
     needs: release
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_pages == true }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
