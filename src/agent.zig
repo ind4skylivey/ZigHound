@@ -343,3 +343,4 @@ pub const Agent = struct {
         return try crypto.decrypt(self.allocator, self.key, buf);
     }
 };
+ 
