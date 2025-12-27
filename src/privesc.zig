@@ -15,9 +15,9 @@ pub const PrivEsc = struct {
     }
 
     pub fn audit(self: *PrivEsc) ![]u8 {
-        var report = ArrayList(u8).init(self.allocator);
-        defer report.deinit();
-        const writer = report.writer();
+        var report: std.ArrayListUnmanaged(u8) = .empty;
+        defer report.deinit(self.allocator);
+        const writer = report.writer(self.allocator);
 
         try writer.print("=== Privilege Escalation Audit ===\n", .{});
 
@@ -29,7 +29,7 @@ pub const PrivEsc = struct {
             try writer.print("[-] OS not supported for automated audit.\n", .{});
         }
 
-        return report.toOwnedSlice();
+        return report.toOwnedSlice(self.allocator);
     }
 
     fn auditLinux(self: *PrivEsc, writer: anytype) !void {

@@ -125,11 +125,15 @@ pub const Agent = struct {
         const conn = try std.net.tcpConnectToAddress(address);
         defer conn.close();
 
-        var bw = std.io.bufferedWriter(conn.writer());
-        const reader = conn.reader();
+        var read_buf: [4096]u8 = undefined;
+        var write_buf: [4096]u8 = undefined;
+        var r_state = conn.reader(&read_buf);
+        var w_state = conn.writer(&write_buf);
+        const reader = r_state.interface();
+        const writer = &w_state.interface;
 
-        try self.sendPing(&bw, reader);
-        try self.checkTasks(&bw, reader);
+        try self.sendPing(writer, reader);
+        try self.checkTasks(writer, reader);
     }
 
     fn sendPing(self: *Agent, writer: anytype, reader: anytype) !void {
@@ -320,12 +324,11 @@ pub const Agent = struct {
         if (resp) |r| self.allocator.free(r);
     }
 
-    fn sendEncrypted(self: *Agent, bw: anytype, plaintext: []const u8) !void {
+    fn sendEncrypted(self: *Agent, writer: anytype, plaintext: []const u8) !void {
         const encrypted = try crypto.encrypt(self.allocator, self.key, plaintext);
         defer self.allocator.free(encrypted);
-        try bw.writer().writeInt(u32, @as(u32, @intCast(encrypted.len)), .little);
-        try bw.writer().writeAll(encrypted);
-        try bw.flush();
+        try writer.writeInt(u32, @as(u32, @intCast(encrypted.len)), .little);
+        try writer.writeAll(encrypted);
     }
 
     fn receiveEncrypted(self: *Agent, reader: anytype) !?[]u8 {

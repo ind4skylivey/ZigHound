@@ -1,5 +1,4 @@
 const std = @import("std");
-const ArrayList = std.array_list.Managed;
 
 pub const default_state_file = ".zighound_c2_sim.txt";
 
@@ -29,15 +28,15 @@ pub const Command = struct {
 
 pub const C2State = struct {
     allocator: std.mem.Allocator,
-    beacons: ArrayList(Beacon),
-    commands: ArrayList(Command),
+    beacons: std.ArrayListUnmanaged(Beacon),
+    commands: std.ArrayListUnmanaged(Command),
     next_command_id: u64,
 
     pub fn init(allocator: std.mem.Allocator) C2State {
         return .{
             .allocator = allocator,
-            .beacons = ArrayList(Beacon).init(allocator),
-            .commands = ArrayList(Command).init(allocator),
+            .beacons = .empty,
+            .commands = .empty,
             .next_command_id = 1,
         };
     }
@@ -54,8 +53,8 @@ pub const C2State = struct {
             self.allocator.free(command.status);
             self.allocator.free(command.output);
         }
-        self.beacons.deinit();
-        self.commands.deinit();
+        self.beacons.deinit(self.allocator);
+        self.commands.deinit(self.allocator);
     }
 };
 
@@ -92,7 +91,7 @@ pub fn loadState(allocator: std.mem.Allocator, path: []const u8) !C2State {
             const jitter = std.fmt.parseInt(u32, jitter_str, 10) catch return StateError.InvalidStateLine;
             const last_callback = std.fmt.parseInt(i64, last_callback_str, 10) catch return StateError.InvalidStateLine;
 
-            try state.beacons.append(.{
+            try state.beacons.append(state.allocator, .{
                 .id = id,
                 .listener = listener,
                 .jitter = jitter,
@@ -113,7 +112,7 @@ pub fn loadState(allocator: std.mem.Allocator, path: []const u8) !C2State {
 
             if (id >= state.next_command_id) state.next_command_id = id + 1;
 
-            try state.commands.append(.{
+            try state.commands.append(state.allocator, .{
                 .id = id,
                 .beacon_id = beacon_id,
                 .command = command_text,
@@ -168,7 +167,7 @@ pub fn registerBeacon(state: *C2State, listener: []const u8, jitter: u32) ![]con
     const status = try state.allocator.dupe(u8, "active");
     const now = std.time.timestamp() * 1000;
 
-    try state.beacons.append(.{
+    try state.beacons.append(state.allocator, .{
         .id = id,
         .listener = listener_copy,
         .jitter = jitter,
@@ -193,7 +192,7 @@ pub fn queueCommand(state: *C2State, beacon_id: []const u8, command: []const u8)
     const status = try state.allocator.dupe(u8, "queued");
     const output = try state.allocator.dupe(u8, "");
 
-    try state.commands.append(.{
+    try state.commands.append(state.allocator, .{
         .id = command_id,
         .beacon_id = beacon_copy,
         .command = command_copy,

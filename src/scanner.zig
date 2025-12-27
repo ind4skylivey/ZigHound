@@ -3,14 +3,22 @@
 // Proprietary and confidential.
 
 const std = @import("std");
+
 const builtin = @import("builtin");
+
 const util = @import("util.zig");
-const os = if (@hasDecl(std, "posix")) std.posix else os;
-const ArrayList = std.array_list.Managed;
+
+const os = if (@hasDecl(std, "posix")) std.posix else std.os;
+
+
 
 pub const Scanner = struct {
+
     allocator: std.mem.Allocator,
-    results: ArrayList(ScanResult),
+
+    results: std.ArrayListUnmanaged(ScanResult),
+
+
 
     pub const ReportFormat = enum {
         auto,
@@ -62,7 +70,7 @@ pub const Scanner = struct {
     pub fn init(allocator: std.mem.Allocator) Scanner {
         return .{
             .allocator = allocator,
-            .results = ArrayList(ScanResult).init(allocator),
+            .results = .empty,
         };
     }
 
@@ -71,7 +79,7 @@ pub const Scanner = struct {
             self.allocator.free(result.ip);
             if (result.banner) |b| self.allocator.free(b);
         }
-        self.results.deinit();
+        self.results.deinit(self.allocator);
     }
 
     pub fn scanTarget(
@@ -81,7 +89,7 @@ pub const Scanner = struct {
         options: ScanOptions,
     ) !void {
         var ports_list = try parsePorts(self.allocator, ports_str);
-        defer ports_list.deinit();
+        defer ports_list.deinit(self.allocator);
 
         const range = try parseTarget(target);
         const host_count: u64 = @as(u64, range.end) - @as(u64, range.start) + 1;
@@ -162,7 +170,7 @@ pub const Scanner = struct {
 
     const Shared = struct {
         allocator: std.mem.Allocator,
-        results: *ArrayList(ScanResult),
+        results: *std.ArrayListUnmanaged(ScanResult),
         verbose: bool,
         quiet: bool,
         color: bool,
@@ -219,7 +227,7 @@ pub const Scanner = struct {
 
                 var stored = false;
                 shared.results_mutex.lock();
-                shared.results.append(result) catch {};
+                shared.results.append(shared.allocator, result) catch {};
                 shared.open_count += 1;
                 stored = true;
                 shared.results_mutex.unlock();
@@ -383,8 +391,8 @@ pub const Scanner = struct {
         return .{ .start = start, .end = end };
     }
 
-    fn parsePorts(allocator: std.mem.Allocator, ports_str: []const u8) !ArrayList(u16) {
-        var ports = ArrayList(u16).init(allocator);
+    fn parsePorts(allocator: std.mem.Allocator, ports_str: []const u8) !std.ArrayListUnmanaged(u16) {
+        var ports: std.ArrayListUnmanaged(u16) = .empty;
 
         const included = try allocator.alloc(bool, 65_536);
         defer allocator.free(included);
@@ -408,7 +416,7 @@ pub const Scanner = struct {
                     const port = @as(u16, @intCast(port_value));
                     const index = @as(usize, port);
                     if (!included[index]) {
-                        try ports.append(port);
+                        try ports.append(allocator, port);
                         included[index] = true;
                     }
                 }
@@ -416,7 +424,7 @@ pub const Scanner = struct {
                 const port = try parsePortValue(token);
                 const index = @as(usize, port);
                 if (!included[index]) {
-                    try ports.append(port);
+                    try ports.append(allocator, port);
                     included[index] = true;
                 }
             }

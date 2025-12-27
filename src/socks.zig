@@ -37,16 +37,16 @@ pub const Socks5Server = struct {
     // Handles the initial SOCKS5 handshake (Client Auth negotiation)
     pub fn handleHandshake(reader: anytype, writer: anytype) !void {
         // Version (1 byte)
-        const ver = try reader.readByte();
+        const ver = try reader.takeByte();
         if (ver != 5) return error.InvalidSocksVersion;
 
         // Number of methods (1 byte)
-        const nmethods = try reader.readByte();
+        const nmethods = try reader.takeByte();
         
         // Methods (n bytes)
         var methods: [255]u8 = undefined;
         if (nmethods > 0) {
-            _ = try reader.readNoEof(methods[0..nmethods]);
+            _ = try reader.readSliceAll(methods[0..nmethods]);
         }
 
         // We only support NO AUTH (0x00) for now
@@ -63,26 +63,26 @@ pub const Socks5Server = struct {
 
     // Parses the connection request (CONNECT X:Y)
     pub fn handleRequest(allocator: std.mem.Allocator, reader: anytype, writer: anytype) !Request {
-        const ver = try reader.readByte();
+        const ver = try reader.takeByte();
         if (ver != 5) return error.InvalidSocksVersion;
 
-        const cmd = try reader.readByte(); // 1 = CONNECT
-        _ = try reader.readByte(); // RSV (Reserved)
-        const atyp = try reader.readByte(); // Address Type
+        const cmd = try reader.takeByte(); // 1 = CONNECT
+        _ = try reader.takeByte(); // RSV (Reserved)
+        const atyp = try reader.takeByte(); // Address Type
 
         var addr: std.net.Address = undefined;
         var domain: ?[]u8 = null;
 
         if (atyp == 1) { // IPv4
             var ip: [4]u8 = undefined;
-            _ = try reader.readNoEof(&ip);
-            const port = try reader.readInt(u16, .big);
+            _ = try reader.readSliceAll(&ip);
+            const port = try reader.takeInt(u16, .big);
             addr = std.net.Address.initIp4(ip, port);
         } else if (atyp == 3) { // Domain Name
-            const len = try reader.readByte();
+            const len = try reader.takeByte();
             const d = try allocator.alloc(u8, len);
-            _ = try reader.readNoEof(d);
-            const port = try reader.readInt(u16, .big);
+            _ = try reader.readSliceAll(d);
+            const port = try reader.takeInt(u16, .big);
             // We return the domain so the Agent can resolve it remotely!
             // But we need a dummy address for the struct.
             addr = std.net.Address.initIp4(.{0,0,0,0}, port);
