@@ -409,7 +409,7 @@ fn handleC2List(allocator: std.mem.Allocator, args: []const []const u8) !void {
 fn handleEvasion(args: []const []const u8) !void {
     _ = args;
     std.debug.print("[*] Running Evasion/Anti-Analysis Checks...\n", .{});
-    
+
     if (Evasion.isAnalysisEnvironment()) {
         std.debug.print("[!] ANALYSIS DETECTED! This machine appears to be a sandbox.\n", .{});
         std.debug.print("    - Check CPU Cores: FAIL (< 2)\n", .{});
@@ -504,4 +504,3 @@ fn printC2Help() void {
         \\
     , .{});
 }
-

@@ -1,0 +1,102 @@
+name: CI - Validate ZigHound
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+          cache: false
+
+      - name: Build ZigHound
+        run: zig build
+
+      - name: Run Tests
+        run: zig build test
+
+  format-check:
+    name: Code Format Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+          cache: false
+
+      - name: Check Code Format
+        run: |
+          zig fmt --check src/*.zig
+          if [ $? -ne 0 ]; then
+            echo "❌ Code formatting issues found. Run 'zig fmt src/*.zig' to fix."
+            exit 1
+          fi
+          echo "✅ Code format check passed"
+
+  security-scan:
+    name: Security Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy Security Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy Results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
+
+      - name: Check for Secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+        continue-on-error: true
+
+  summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [build-and-test, format-check, security-scan]
+    if: always()
+
+    steps:
+      - name: Check Build Status
+        run: |
+          echo "✅ Build & Test: ${{ needs.build-and-test.result }}"
+          echo "✅ Format Check: ${{ needs.format-check.result }}"
+          echo "✅ Security Scan: ${{ needs.security-scan.result }}"
+          
+          if [ "${{ needs.build-and-test.result }}" != "success" ]; then
+            exit 1
+          fi
+          if [ "${{ needs.format-check.result }}" != "success" ]; then
+            exit 1
+          fi

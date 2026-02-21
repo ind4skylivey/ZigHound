@@ -31,7 +31,7 @@ test "obfuscation" {
     const allocator = std.testing.allocator;
     // '0xAA' is the key.
     const Secret = ObfuscatedString("ThisIsHidden", 0xAA);
-    
+
     // In the binary, "ThisIsHidden" does not exist. Only the XOR'd bytes exist.
     const revealed = try Secret.decrypt(allocator);
     defer allocator.free(revealed);

@@ -9,13 +9,13 @@ pub const Socks5Server = struct {
     allocator: std.mem.Allocator,
     port: u16,
     listener: ?std.net.Server = null,
-    
+
     // Callbacks to bridge SOCKS <-> C2
     // We need to tell the C2 logic: "Hey, open a connection to X:Y" and "Send this data"
     // For now, we'll just focus on the SOCKS protocol parsing.
 
     pub fn init(allocator: std.mem.Allocator, port: u16) Socks5Server {
-        return .{ 
+        return .{
             .allocator = allocator,
             .port = port,
         };
@@ -42,7 +42,7 @@ pub const Socks5Server = struct {
 
         // Number of methods (1 byte)
         const nmethods = try reader.takeByte();
-        
+
         // Methods (n bytes)
         var methods: [255]u8 = undefined;
         if (nmethods > 0) {
@@ -85,7 +85,7 @@ pub const Socks5Server = struct {
             const port = try reader.takeInt(u16, .big);
             // We return the domain so the Agent can resolve it remotely!
             // But we need a dummy address for the struct.
-            addr = std.net.Address.initIp4(.{0,0,0,0}, port);
+            addr = std.net.Address.initIp4(.{ 0, 0, 0, 0 }, port);
             domain = d;
         } else {
             return error.UnsupportedAddressType;

@@ -10,15 +10,10 @@ const util = @import("util.zig");
 
 const os = if (@hasDecl(std, "posix")) std.posix else std.os;
 
-
-
 pub const Scanner = struct {
-
     allocator: std.mem.Allocator,
 
     results: std.ArrayListUnmanaged(ScanResult),
-
-
 
     pub const ReportFormat = enum {
         auto,
@@ -212,7 +207,7 @@ pub const Scanner = struct {
             if (isPortOpen(ip_bytes, port, work.timeout_ms)) {
                 const service = serviceForPort(port);
                 const ip_str = formatIpv4(shared.allocator, ip_bytes) catch continue;
-                
+
                 // Grab banner
                 const banner = grabBanner(shared.allocator, ip_bytes, port, 2000) catch null;
 
@@ -342,8 +337,8 @@ pub const Scanner = struct {
             return;
         }
 
-        std.debug.print("{s:<15}  {s:>5}  {s}\n", .{"IP", "PORT", "SERVICE"});
-        std.debug.print("{s:-<15}  {s:-<5}  {s:-<7}\n", .{"", "", ""});
+        std.debug.print("{s:<15}  {s:>5}  {s}\n", .{ "IP", "PORT", "SERVICE" });
+        std.debug.print("{s:-<15}  {s:-<5}  {s:-<7}\n", .{ "", "", "" });
 
         for (results) |result| {
             std.debug.print("{s:<15}  {d:>5}  {s}\n", .{ result.ip, result.port, result.service });
@@ -525,9 +520,9 @@ pub const Scanner = struct {
     };
 
     fn grabBanner(allocator: std.mem.Allocator, ip: [4]u8, port: u16, timeout_ms: u32) !?[]u8 {
-        _ = timeout_ms; 
+        _ = timeout_ms;
         const address = std.net.Address.initIp4(ip, port);
-        
+
         const stream = std.net.tcpConnectToAddress(address) catch return null;
         defer stream.close();
 

