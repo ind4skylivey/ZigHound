@@ -27,15 +27,15 @@ pub const Evasion = struct {
     /// We verify if 'sleep(1s)' actually took 1s.
     fn checkTimeDistortion() bool {
         var timer = std.time.Timer.start() catch return false;
-        
+
         // Sleep for 500ms
         util.sleep(500 * 1_000_000);
-        
+
         const delta = timer.read(); // nanoseconds
 
         // If we slept less than 450ms (450,000,000ns), time is being accelerated/skipped.
         if (delta < 450 * 1_000_000) return true;
-        
+
         return false;
     }
 };

@@ -45,7 +45,7 @@ pub const PrivEsc = struct {
         // 2. Search for SUID binaries in common paths
         try writer.print("[*] Searching for SUID binaries...\n", .{});
         const paths = [_][]const u8{ "/usr/bin", "/bin", "/usr/sbin", "/sbin" };
-        
+
         for (paths) |path| {
             var dir = std.fs.cwd().openDir(path, .{ .iterate = true }) catch continue;
             defer dir.close();
@@ -67,7 +67,7 @@ pub const PrivEsc = struct {
         _ = self;
         try writer.print("[*] Checking for Unquoted Service Paths...\n", .{});
         try writer.print("    [i] Run manually: wmic service get name,displayname,pathname,startmode | findstr /i \"Auto\" | findstr /i /v \"C:\\Windows\\\" | findstr /i /v \"\"\"\n", .{});
-        
+
         try writer.print("[*] Checking AlwaysInstallElevated...\n", .{});
         try writer.print("    [i] Run manually: reg query HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated\n", .{});
     }

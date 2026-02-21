@@ -30,10 +30,10 @@ pub const ProxyManager = struct {
             // If DNS resolution needed, we'd do it here. For now assume IP.
             return error.InvalidAddress;
         };
-        
+
         // Timeout handling is tricky here without async IO, so we rely on OS defaults or non-blocking later.
         const stream = try std.net.tcpConnectToAddress(address);
-        
+
         self.mutex.lock();
         defer self.mutex.unlock();
         try self.sockets.put(id, stream);
@@ -61,7 +61,7 @@ pub const ProxyManager = struct {
 
         var buf: [4096]u8 = undefined;
         // Non-blocking read would be ideal.
-        
+
         const len = try stream.read(&buf);
         return self.allocator.dupe(u8, buf[0..len]);
     }

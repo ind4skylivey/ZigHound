@@ -6,7 +6,7 @@ pub fn sleep(ns: u64) void {
         std.os.windows.kernel32.Sleep(@as(u32, @intCast(ns / 1_000_000)));
         return;
     }
-    
+
     // Try std.Thread.sleep (Modern Zig 0.15.2+)
     if (@hasDecl(std.Thread, "sleep")) {
         std.Thread.sleep(ns);
@@ -18,14 +18,11 @@ pub fn sleep(ns: u64) void {
         std.time.sleep(ns);
         return;
     }
-    
+
     // Manual fallback for Linux
     if (builtin.os.tag == .linux) {
         const timespec = extern struct { tv_sec: isize, tv_nsec: isize };
-        var req = timespec{ 
-            .tv_sec = @as(isize, @intCast(ns / 1_000_000_000)), 
-            .tv_nsec = @as(isize, @intCast(ns % 1_000_000_000)) 
-        };
+        var req = timespec{ .tv_sec = @as(isize, @intCast(ns / 1_000_000_000)), .tv_nsec = @as(isize, @intCast(ns % 1_000_000_000)) };
         _ = std.os.linux.syscall2(.nanosleep, @intFromPtr(&req), 0);
     }
 }
