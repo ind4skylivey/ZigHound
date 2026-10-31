@@ -48,6 +48,9 @@ zig-out/
 .zig-cache/
 .zighound_c2_sim*.txt
 results.json
+results.ndjson
+results.sarif
+results.csv
 docs/
 
 ############################
