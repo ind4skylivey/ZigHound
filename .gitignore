@@ -50,6 +50,7 @@ zig-out/
 results.json
 results.ndjson
 results.sarif
+results.csv
 docs/
 
 ############################
